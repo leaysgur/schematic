@@ -4,6 +4,8 @@ mod config;
 mod error;
 mod layer;
 mod loader;
+mod parser;
+mod parsers;
 mod source;
 mod validator;
 
@@ -16,6 +18,7 @@ pub use config::*;
 pub use error::*;
 pub use layer::*;
 pub use loader::*;
+pub use parser::*;
 pub use schematic_macros::*;
 pub use source::*;
 pub use starbase_styles::color;

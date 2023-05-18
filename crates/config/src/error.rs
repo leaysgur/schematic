@@ -124,21 +124,6 @@ impl ConfigError {
     }
 }
 
-#[derive(Error, Debug, Diagnostic)]
-#[error("Invalid setting {}", .path.style(Style::Id))]
-#[diagnostic(severity(Error))]
-pub struct ParserError {
-    #[source_code]
-    pub content: NamedSource,
-
-    pub error: String,
-
-    pub path: String,
-
-    #[label("{}", .error)]
-    pub span: Option<SourceSpan>,
-}
-
 // #[derive(Error, Debug, Diagnostic)]
 // pub enum ParserError {
 //     #[cfg(feature = "json")]

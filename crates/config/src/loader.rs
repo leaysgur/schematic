@@ -1,7 +1,8 @@
 use crate::config::{Config, ExtendsFrom, PartialConfig};
 use crate::error::ConfigError;
 use crate::layer::Layer;
-use crate::source::{Source, SourceFormat};
+use crate::parser::Parser;
+use crate::source::Source;
 use serde::Serialize;
 use starbase_styles::color;
 use std::marker::PhantomData;
@@ -10,46 +11,45 @@ use std::path::PathBuf;
 #[derive(Serialize)]
 pub struct ConfigLoadResult<T: Config> {
     pub config: T,
-    pub format: SourceFormat,
     pub layers: Vec<Layer<T>>,
 }
 
 pub struct ConfigLoader<T: Config> {
     _config: PhantomData<T>,
-    format: SourceFormat,
     label: String,
+    parser: Box<dyn Parser<T::Partial>>,
     sources: Vec<Source>,
 }
 
 impl<T: Config> ConfigLoader<T> {
-    pub fn new(format: SourceFormat) -> Self {
+    pub fn new(parser: impl Parser<T::Partial>) -> Self {
         let meta = T::META;
 
         ConfigLoader {
             _config: PhantomData,
-            format,
             label: if let Some(file) = &meta.file {
                 color::file(file)
             } else {
                 color::label(meta.name)
             },
+            parser: Box::new(parser),
             sources: vec![],
         }
     }
 
     #[cfg(feature = "json")]
     pub fn json() -> Self {
-        ConfigLoader::new(SourceFormat::Json)
+        ConfigLoader::new(crate::parsers::json::JsonParser::default())
     }
 
     #[cfg(feature = "toml")]
     pub fn toml() -> Self {
-        ConfigLoader::new(SourceFormat::Toml)
+        ConfigLoader::new(crate::parsers::toml::TomlParser::default())
     }
 
     #[cfg(feature = "yaml")]
     pub fn yaml() -> Self {
-        ConfigLoader::new(SourceFormat::Yaml)
+        ConfigLoader::new(crate::parsers::yaml::YamlParser::default())
     }
 
     pub fn code<S: TryInto<String>>(&mut self, code: S) -> Result<&mut Self, ConfigError> {
@@ -102,11 +102,7 @@ impl<T: Config> ConfigLoader<T> {
                 error,
             })?;
 
-        Ok(ConfigLoadResult {
-            config,
-            format: self.format,
-            layers,
-        })
+        Ok(ConfigLoadResult { config, layers })
     }
 
     pub fn load_partial(

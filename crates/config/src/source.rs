@@ -1,106 +1,8 @@
-use crate::error::{ConfigError, ParserError};
-use miette::{NamedSource, SourceOffset, SourceSpan};
+use crate::error::ConfigError;
 use serde::{de::DeserializeOwned, Serialize};
+use std::fmt::{self, Display};
 use std::fs;
 use std::path::PathBuf;
-
-fn create_span(content: &str, line: usize, column: usize) -> SourceSpan {
-    let offset = SourceOffset::from_location(content, line, column).offset();
-    let length = 0;
-
-    (offset, length).into()
-}
-
-#[derive(Clone, Copy, Debug, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SourceFormat {
-    #[cfg(feature = "json")]
-    Json,
-
-    #[cfg(feature = "toml")]
-    Toml,
-
-    #[cfg(feature = "yaml")]
-    Yaml,
-}
-
-impl SourceFormat {
-    pub fn parse<D>(&self, content: String, source: &str) -> Result<D, ParserError>
-    where
-        D: DeserializeOwned,
-    {
-        let data: D = match self {
-            #[cfg(feature = "json")]
-            SourceFormat::Json => {
-                let de = &mut serde_json::Deserializer::from_str(&content);
-
-                serde_path_to_error::deserialize(de).map_err(|error| ParserError {
-                    content: NamedSource::new(source, content.to_owned()),
-                    path: error.path().to_string(),
-                    span: Some(create_span(
-                        &content,
-                        error.inner().line(),
-                        error.inner().column(),
-                    )),
-                    error: error.inner().to_string(),
-                })?
-            }
-
-            #[cfg(feature = "toml")]
-            SourceFormat::Toml => {
-                let de = toml::Deserializer::new(&content);
-
-                serde_path_to_error::deserialize(de).map_err(|error| ParserError {
-                    content: NamedSource::new(source, content.to_owned()),
-                    path: error.path().to_string(),
-                    span: error.inner().span().map(|s| s.into()),
-                    error: error.inner().message().to_owned(),
-                })?
-            }
-
-            #[cfg(feature = "yaml")]
-            SourceFormat::Yaml => {
-                use serde::de::IntoDeserializer;
-
-                // First pass, convert string to value
-                let de = serde_yaml::Deserializer::from_str(&content);
-                let mut result: serde_yaml::Value =
-                    serde_path_to_error::deserialize(de).map_err(|error| ParserError {
-                        content: NamedSource::new(source, content.to_owned()),
-                        path: error.path().to_string(),
-                        span: error
-                            .inner()
-                            .location()
-                            .map(|s| create_span(&content, s.line(), s.column())),
-                        error: error.inner().to_string(),
-                    })?;
-
-                // Applies anchors/aliases/references
-                result.apply_merge().map_err(|error| ParserError {
-                    content: NamedSource::new(source, content.to_owned()),
-                    path: String::new(),
-                    span: error.location().map(|s| (s.line(), s.column()).into()),
-                    error: error.to_string(),
-                })?;
-
-                // Second pass, convert value to struct
-                let de = result.into_deserializer();
-
-                serde_path_to_error::deserialize(de).map_err(|error| ParserError {
-                    content: NamedSource::new(source, content.to_owned()),
-                    path: error.path().to_string(),
-                    span: error
-                        .inner()
-                        .location()
-                        .map(|s| create_span(&content, s.line(), s.column())),
-                    error: error.inner().to_string(),
-                })?
-            }
-        };
-
-        Ok(data)
-    }
-}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
@@ -197,6 +99,18 @@ impl Source {
             path: error.path,
             span: error.span,
         })
+    }
+}
+
+impl Display for Source {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Source::Code { .. } => write!(f, "code"),
+            Source::Defaults => write!(f, "defaults"),
+            Source::Env => write!(f, "env"),
+            Source::File { path } => write!(f, "{}", path.display()),
+            Source::Url { url } => write!(f, "{}", url),
+        }
     }
 }
 
