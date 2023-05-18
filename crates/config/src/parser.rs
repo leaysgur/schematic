@@ -26,6 +26,10 @@ pub struct ParserError {
     pub span: Option<SourceSpan>,
 }
 
-pub trait Parser<T: DeserializeOwned> {
-    fn parse(&self, content: &str, source: &Source) -> Result<T, ParserError>;
+pub trait Parser: Sized {
+    fn parse<'de, T: DeserializeOwned>(
+        &self,
+        content: &'de str,
+        source: &Source,
+    ) -> Result<T, ParserError>;
 }

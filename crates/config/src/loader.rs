@@ -17,12 +17,15 @@ pub struct ConfigLoadResult<T: Config> {
 pub struct ConfigLoader<T: Config> {
     _config: PhantomData<T>,
     label: String,
-    parser: Box<dyn Parser<T::Partial>>,
+    parser: Box<dyn Parser>,
     sources: Vec<Source>,
 }
 
 impl<T: Config> ConfigLoader<T> {
-    pub fn new(parser: impl Parser<T::Partial>) -> Self {
+    pub fn new<P>(parser: P) -> Self
+    where
+        P: Parser,
+    {
         let meta = T::META;
 
         ConfigLoader {
@@ -133,7 +136,7 @@ impl<T: Config> ConfigLoader<T> {
         // Last layer should be environment variables
         layers.push(Layer {
             partial: T::Partial::env_values()?,
-            source: Source::Env,
+            source: Source::EnvVars,
         });
 
         Ok(layers)
@@ -185,11 +188,36 @@ impl<T: Config> ConfigLoader<T> {
         Ok(merged)
     }
 
+    pub fn parse(&self, source: &Source, label: &str) -> Result<T::Partial, ConfigError> {
+        let content = match source {
+            Source::Code { code } => code.to_owned(),
+            Source::File { path } => {
+                if !path.exists() {
+                    return Err(ConfigError::MissingFile(path.to_path_buf()));
+                }
+
+                std::fs::read_to_string(path)?
+            }
+            Source::Url { url } => reqwest::blocking::get(url)?.text()?,
+            _ => unreachable!(),
+        };
+
+        self.parser
+            .parse(&content, source)
+            .map_err(|error| ConfigError::Parser {
+                config: label.to_owned(),
+                content: error.content,
+                error: error.error,
+                path: error.path,
+                span: error.span,
+            })
+    }
+
     fn parse_into_layers(&self, sources_to_parse: &[Source]) -> Result<Vec<Layer<T>>, ConfigError> {
         let mut layers: Vec<Layer<T>> = vec![];
 
         for source in sources_to_parse {
-            let partial: T::Partial = source.parse(self.format, &self.label)?;
+            let partial: T::Partial = self.parse(source, &self.label)?;
 
             if let Some(extends_from) = partial.extends_from() {
                 let extended_layers = self.extend_additional_layers(source, &extends_from)?;

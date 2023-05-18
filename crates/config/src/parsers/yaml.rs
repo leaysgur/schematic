@@ -4,12 +4,14 @@ use miette::NamedSource;
 use serde::de::DeserializeOwned;
 
 #[derive(Default)]
-pub struct YamlParser<T: DeserializeOwned> {
-    _marker: std::marker::PhantomData<T>,
-}
+pub struct YamlParser;
 
-impl<T: DeserializeOwned> Parser<T> for YamlParser<T> {
-    fn parse(&self, content: &str, source: &Source) -> Result<T, ParserError> {
+impl Parser for YamlParser {
+    fn parse<'de, T: DeserializeOwned>(
+        &self,
+        content: &'de str,
+        source: &Source,
+    ) -> Result<T, ParserError> {
         use serde::de::IntoDeserializer;
 
         // First pass, convert string to value

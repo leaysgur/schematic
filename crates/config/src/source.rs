@@ -1,15 +1,14 @@
 use crate::error::ConfigError;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::Serialize;
 use std::fmt::{self, Display};
-use std::fs;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(tag = "type", rename_all = "kebab-case")]
 pub enum Source {
     Code { code: String },
     Defaults,
-    Env,
+    EnvVars,
     File { path: PathBuf },
     Url { url: String },
 }
@@ -74,32 +73,6 @@ impl Source {
 
         Ok(Source::Url { url })
     }
-
-    pub fn parse<D>(&self, format: SourceFormat, label: &str) -> Result<D, ConfigError>
-    where
-        D: DeserializeOwned,
-    {
-        let result = match self {
-            Source::Code { code } => format.parse(code.to_owned(), "code"),
-            Source::File { path } => {
-                if !path.exists() {
-                    return Err(ConfigError::MissingFile(path.to_path_buf()));
-                }
-
-                format.parse(fs::read_to_string(path)?, path.to_str().unwrap())
-            }
-            Source::Url { url } => format.parse(reqwest::blocking::get(url)?.text()?, url),
-            _ => unreachable!(),
-        };
-
-        result.map_err(|error| ConfigError::Parser {
-            config: label.to_owned(),
-            content: error.content,
-            error: error.error,
-            path: error.path,
-            span: error.span,
-        })
-    }
 }
 
 impl Display for Source {
@@ -107,7 +80,7 @@ impl Display for Source {
         match self {
             Source::Code { .. } => write!(f, "code"),
             Source::Defaults => write!(f, "defaults"),
-            Source::Env => write!(f, "env"),
+            Source::EnvVars => write!(f, "env-vars"),
             Source::File { path } => write!(f, "{}", path.display()),
             Source::Url { url } => write!(f, "{}", url),
         }

@@ -4,12 +4,14 @@ use miette::NamedSource;
 use serde::de::DeserializeOwned;
 
 #[derive(Default)]
-pub struct TomlParser<T: DeserializeOwned> {
-    _marker: std::marker::PhantomData<T>,
-}
+pub struct TomlParser;
 
-impl<T: DeserializeOwned> Parser<T> for TomlParser<T> {
-    fn parse(&self, content: &str, source: &Source) -> Result<T, ParserError> {
+impl Parser for TomlParser {
+    fn parse<'de, T: DeserializeOwned>(
+        &self,
+        content: &'de str,
+        source: &Source,
+    ) -> Result<T, ParserError> {
         let de = toml::Deserializer::new(&content);
 
         serde_path_to_error::deserialize(de).map_err(|error| ParserError {
