@@ -2,7 +2,7 @@ use super::setting::Setting;
 use darling::FromDeriveInput;
 use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote, ToTokens};
-use syn::{Attribute, ExprPath};
+use syn::{Attribute, ExprPath, Generics};
 
 // #[serde()]
 #[derive(FromDeriveInput, Default)]
@@ -30,6 +30,7 @@ pub struct Config<'l> {
     pub args: ConfigArgs,
     pub serde_args: SerdeArgs,
     pub attrs: Vec<&'l Attribute>,
+    pub generics: &'l Generics,
     pub name: &'l Ident,
     pub settings: Vec<Setting<'l>>,
 }
@@ -153,12 +154,27 @@ impl<'l> Config<'l> {
 
         attrs
     }
+
+    pub fn get_generics(&self) -> (TokenStream, TokenStream) {
+        let lhs = self.generics.clone();
+        let mut rhs = self.generics.clone();
+
+        // Remove bounds from RHS
+        for param in &mut rhs.params {
+            if let syn::GenericParam::Type(ty) = param {
+                ty.bounds.clear();
+            }
+        }
+
+        (quote! { #lhs }, quote! { #rhs })
+    }
 }
 
 impl<'l> ToTokens for Config<'l> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let name = self.name;
         let casing_format = self.get_casing_format();
+        let (generics_lhs, generics_rhs) = self.get_generics();
 
         let context = match self.args.context.as_ref() {
             Some(ctx) => quote! { #ctx },
@@ -173,7 +189,7 @@ impl<'l> ToTokens for Config<'l> {
         let token = quote! {
             #[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
             #(#partial_attrs)*
-            pub struct #partial_name {
+            pub struct #partial_name #generics_lhs {
                 #(#partial_fields)*
             }
         };
@@ -209,7 +225,7 @@ impl<'l> ToTokens for Config<'l> {
 
         tokens.extend(quote! {
             #[automatically_derived]
-            impl schematic::PartialConfig for #partial_name {
+            impl #generics_lhs schematic::PartialConfig for #partial_name #generics_rhs {
                 type Context = #context;
 
                 fn default_values(context: &Self::Context) -> Result<Self, schematic::ConfigError> {
@@ -271,7 +287,7 @@ impl<'l> ToTokens for Config<'l> {
 
         tokens.extend(quote! {
             #[automatically_derived]
-            impl Default for #name {
+            impl #generics_lhs Default for #name #generics_rhs {
                 fn default() -> Self {
                     let context = <<Self as schematic::Config>::Partial as schematic::PartialConfig>::Context::default();
 
@@ -282,8 +298,8 @@ impl<'l> ToTokens for Config<'l> {
             }
 
             #[automatically_derived]
-            impl schematic::Config for #name {
-                type Partial = #partial_name;
+            impl #generics_lhs schematic::Config for #name #generics_rhs {
+                type Partial = #partial_name #generics_rhs;
 
                 const META: schematic::Meta = #meta;
 
@@ -310,7 +326,7 @@ impl<'l> ToTokens for Config<'l> {
 
             tokens.extend(quote! {
                 #[automatically_derived]
-                impl schematic::Schematic for #name {
+                impl #generics_lhs schematic::Schematic for #name #generics_rhs {
                     fn generate_schema() -> schematic::SchemaType {
                         use schematic::schema::*;
 
@@ -329,7 +345,7 @@ impl<'l> ToTokens for Config<'l> {
                 }
 
                 #[automatically_derived]
-                impl schematic::Schematic for #partial_name {
+                impl #generics_lhs schematic::Schematic for #partial_name #generics_rhs {
                     fn generate_schema() -> schematic::SchemaType {
                         let mut schema = #name::generate_schema();
                         schematic::internal::partialize_schema(&mut schema);
@@ -343,10 +359,10 @@ impl<'l> ToTokens for Config<'l> {
         {
             tokens.extend(quote! {
                 #[automatically_derived]
-                impl schematic::Schematic for #name {}
+                impl #generics_lhs schematic::Schematic for #name #generics_rhs {}
 
                 #[automatically_derived]
-                impl schematic::Schematic for #partial_name {}
+                impl #generics_lhs schematic::Schematic for #partial_name #generics_rhs {}
             });
         }
     }

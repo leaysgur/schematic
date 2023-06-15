@@ -29,6 +29,7 @@ pub fn macro_impl(item: TokenStream) -> TokenStream {
         args,
         serde_args,
         attrs: extract_common_attrs(&input.attrs),
+        generics: &input.generics,
         name: &input.ident,
         settings: fields.named.iter().map(Setting::from).collect::<Vec<_>>(),
     };

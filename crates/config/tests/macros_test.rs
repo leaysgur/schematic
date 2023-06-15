@@ -191,6 +191,12 @@ struct Validations {
     nested2: Option<NestedValidations>,
 }
 
+#[derive(Config)]
+pub struct Generics<T, C: Schematic> {
+    basic: T,
+    constrained: C,
+}
+
 /// Container comment.
 #[derive(Config)]
 #[deprecated(since = "1.2.3", note = "Invalid")]
